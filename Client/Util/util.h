@@ -11,22 +11,34 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 
+struct payment
+{
+    char *name;
+    char *surname;
+    char *address;
+    char *card_no;
+    short cvv;
+    float ammount;
+};
+
 int create_tcp_socket(void);
 
 struct sockaddr_in *create_adress(char *ip, int port);
 
-void print_greeting_and_options(int client_socket_fd);
+void send_to_server(int client_socket_fd, char *data);
 
-int choose_option(int client_socket_fd);
+const char *receive_from_server(int client_socket_fd, bool print);
+
+void start_communicating_with_server(int client_socket_fd);
+
+int choose_and_send_option(int client_socket_fd);
 
 void get_server_response(int client_socket_fd, int option);
 
 void make_payment(int client_socket_fd);
 
-void show_total_sum(int client_socket_fd);
+void get_payment_data(struct payment *new_payment);
 
-void sign_up(int client_socket_fd);
-
-void sign_in(int client_socket_fd);
+void display_total_sum(int client_socket_fd);
 
 #endif
