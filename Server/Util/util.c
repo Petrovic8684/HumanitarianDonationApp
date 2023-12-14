@@ -1,5 +1,13 @@
 #include "util.h"
-#include <stdint.h>
+#include "Lists/lists.h"
+#include "IO/io.h"
+
+// Konektovani klijenti.
+static struct list *list = NULL;
+static int list_length = 0;
+
+// Ukupno prikupljena suma.
+static float total_sum = 0.0f;
 
 // Vraća TCP socket.
 int create_tcp_socket(void)
@@ -28,22 +36,33 @@ struct sockaddr_in *create_adress(char *ip, int port)
     return address;
 }
 
-// Konektovani klijenti.
-static struct accepted_socket accepted_sockets[MAX_CONNECTIONS];
-
-// Broj konektovanih klijenata.
-static int accepted_sockets_count = 0;
+// Šalje tekst klijentu.
+void send_text_to_client(int server_socket_fd, char *text)
+{
+    if (send(server_socket_fd, text, 1024, 0) == -1)
+    {
+        perror("Desila se greška pri slanju podataka klijentu.\n");
+        exit(EXIT_FAILURE);
+    }
+}
 
 // Inicijalizuje hvatanje nadolazećih klijenata.
 void start_accepting_incoming_connections(int server_socket_fd)
 {
+    read_total_sum_from_file(&total_sum);
+
     while (true)
     {
         struct accepted_socket *client_socket = accept_incoming_connection(server_socket_fd);
-        accepted_sockets[accepted_sockets_count++] = *client_socket;
+        // accepted_sockets[accepted_sockets_count++] = *client_socket;
+        add(&list, &client_socket);
+        fprintf(stdout, "Trenutan broj aktivnih korisnika: %d\n", ++list_length);
 
-        serve_client_on_separate_thread(client_socket);
+        pthread_t id;
+        pthread_create(&id, NULL, (void *)serve_client, client_socket);
     }
+
+    // clear(&list);
 }
 
 // Hvata nadolazećeg klijenta i vraća ga.
@@ -71,69 +90,194 @@ struct accepted_socket *accept_incoming_connection(int server_socket_fd)
     return accepted_socket;
 }
 
-// Kreira posebnu nit za opsluživanje pojedinačnog klijenta.
-void serve_client_on_separate_thread(struct accepted_socket *client_socket)
-{
-    pthread_t id;
-    pthread_create(&id, NULL, (void *)serve_client, client_socket->socket_fd);
-}
-
 // Opslužuje pojedinačnog klijenta.
-void serve_client(int client_socket_fd)
+void serve_client(struct accepted_socket *client_socket)
 {
-    send_greeting_and_options(client_socket_fd);
-    get_chosen_option(client_socket_fd);
-}
+    send_text_to_client(client_socket->socket_fd, "***** Uspešno povezivanje sa serverom! *****\n\0");
 
-// Šalje poruku o uspešnom povezivanju i opcije.
-void send_greeting_and_options(int client_socket_fd)
-{
-    char *buffer = "***** Uspešno povezivanje sa serverom! *****\nOpcije:\n1) Izvrši uplatu\n2) Prikaži ukupno prikupljena sredstva\n3) Registracija\n4) Prijava\n";
-    if (send(client_socket_fd, buffer, strlen(buffer), 0) == -1)
+    int option = 0;
+    do
     {
-        perror("Desila se greška pri slanju opcija klijentu.\n");
+        send_text_to_client(client_socket->socket_fd, "Opcije:\nO) Izlaz\n1) Izvrši uplatu\n2) Prikaži ukupno prikupljena sredstva\n3) Registracija\n4) Prijava\n5) Poslednjih 10 uplata\n\n\0");
+        option = get_chosen_option(client_socket->socket_fd);
+    } while (option != 0);
+
+    // Zatvaranje klijentskog socketa.
+    if (shutdown(client_socket->socket_fd, SHUT_RDWR) == -1)
+    {
+        perror("Neuspešno zatvaranje klijentskog socketa.\n");
         exit(EXIT_FAILURE);
     }
+
+    rmv(&list, &client_socket);
+    fprintf(stdout, "Trenutan broj aktivnih korisnika: %d\n", --list_length);
 }
 
-void get_chosen_option(int client_socket_fd)
+// Grana logiku na osnovu opcije koju je poslao klijent.
+int get_chosen_option(int client_socket_fd)
 {
     int option;
-
     if (recv(client_socket_fd, &option, sizeof(option), 0) == -1)
     {
-        perror("Desila se greška pri primanju izabrane opcije.\n");
+        perror("Greska pri primanju opcije od klijenta!\n");
         exit(EXIT_FAILURE);
     }
 
     switch (option)
     {
     case 1:
-        // make_payment(client_socket_fd);
+        make_payment(client_socket_fd);
         break;
     case 2:
         send_total_sum(client_socket_fd);
         break;
     case 3:
-        // sign_up(client_socket_fd);
+        sign_up(client_socket_fd);
         break;
     case 4:
         // sign_in(client_socket_fd);
         break;
     default:
-        perror("Neispravan izbor!");
-        close(client_socket_fd);
-        exit(EXIT_FAILURE);
+        break;
     }
+
+    return option;
 }
 
-static float total_sum = 0.0f;
+void make_payment(int client_socket_fd)
+{
+    struct payment new_payment;
+    new_payment.ammount = 0.0f;
+
+    receive_payment_data(client_socket_fd, &new_payment);
+
+    total_sum += new_payment.ammount;
+    write_total_sum_to_file(total_sum);
+
+    fprintf(stdout, "Upravo je uplaćeno %.3f dinara.\n", new_payment.ammount);
+}
+
+void receive_payment_data(int client_socket_fd, struct payment *new_payment)
+{
+    char name[1024];
+    char surname[1024];
+    char address[1024];
+    char card_no[1024];
+    char cvv[1024];
+    float ammount;
+
+    if (recv(client_socket_fd, name, 1024, 0) == -1)
+    {
+        perror("Greska u primanju imena.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (recv(client_socket_fd, surname, 1024, 0) == -1)
+    {
+        perror("Greska u primanju prezimena.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (recv(client_socket_fd, address, 1024, 0) == -1)
+    {
+        perror("Greska u primanju adrese.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (recv(client_socket_fd, card_no, 1024, 0) == -1)
+    {
+        perror("Greska u primanju broja kartice.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (recv(client_socket_fd, cvv, 1024, 0) == -1)
+    {
+        perror("Greska u primanju cvv broja.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (recv(client_socket_fd, &ammount, sizeof(ammount), 0) == -1)
+    {
+        perror("Greska u primanju iznosa.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    new_payment->name = name;
+    new_payment->surname = surname;
+    new_payment->address = address;
+    new_payment->card_no = card_no;
+    new_payment->cvv = cvv;
+    new_payment->ammount = ammount;
+}
 
 void send_total_sum(int client_socket_fd)
 {
     if (send(client_socket_fd, &total_sum, sizeof(total_sum), 0) == -1)
     {
-        perror("Desila se greška pri slanju ukupne sume klijentu.\n");
+        perror("Desila se greska pri slanju ukupnog iznosa klijentu.\n");
         exit(EXIT_FAILURE);
     }
+}
+
+void sign_up(int client_socket_fd)
+{
+    struct user new_user;
+
+    receive_user_data(client_socket_fd, &new_user);
+
+    if (write_user_to_file(&new_user) == false)
+    {
+        perror("Vec postoji korisnik sa tim korisnickim imenom u bazi.\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void receive_user_data(int client_socket_fd, struct user *new_user)
+{
+    char username[1024];
+    char password[1024];
+    char name[1024];
+    char surname[1024];
+    char jmbg[1024];
+    char card_no[1024];
+    char email[1024];
+
+    if (recv(client_socket_fd, username, 1024, 0) == -1)
+    {
+        perror("Greska u slanju korisnickog imena.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (recv(client_socket_fd, password, 1024, 0) == -1)
+    {
+        perror("Greska u slanju lozinke.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (recv(client_socket_fd, name, 1024, 0) == -1)
+    {
+        perror("Greska u slanju imena.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (recv(client_socket_fd, surname, 1024, 0) == -1)
+    {
+        perror("Greska u slanju broja prezimena.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (recv(client_socket_fd, jmbg, 1024, 0) == -1)
+    {
+        perror("Greska u slanju jmbg-a.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (recv(client_socket_fd, card_no, 1024, 0) == -1)
+    {
+        perror("Greska u slanju broja kartice.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (recv(client_socket_fd, email, 1024, 0) == -1)
+    {
+        perror("Greska u slanju email-a.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    new_user->username = username;
+    new_user->password = password;
+    new_user->name = name;
+    new_user->surname = surname;
+    new_user->jmbg = jmbg;
+    new_user->card_no = card_no;
+    new_user->email = email;
 }
