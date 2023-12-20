@@ -66,4 +66,8 @@ void sign_up(int client_socket_fd);
 
 void receive_user_data(int client_socket_fd, struct user *new_user);
 
+void sign_in(int client_socket_fd);
+
+void display_payment_history(int client_socket_fd);
+
 #endif

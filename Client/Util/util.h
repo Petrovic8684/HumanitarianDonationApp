@@ -64,4 +64,8 @@ void send_user_data(int client_socket_fd, struct user new_user);
 
 void get_user_data(struct user *new_user);
 
+void sign_in(int client_socket_fd);
+
+void display_payment_history(int client_socket_fd);
+
 #endif
