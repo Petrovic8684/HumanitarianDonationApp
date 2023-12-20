@@ -119,7 +119,7 @@ int get_chosen_option(int client_socket_fd)
     int option;
     if (recv(client_socket_fd, &option, sizeof(option), 0) == -1)
     {
-        perror("Greska pri primanju opcije od klijenta!\n");
+        perror("Greška pri primanju opcije od klijenta!\n");
         exit(EXIT_FAILURE);
     }
 
@@ -135,7 +135,10 @@ int get_chosen_option(int client_socket_fd)
         sign_up(client_socket_fd);
         break;
     case 4:
-        // sign_in(client_socket_fd);
+        sign_in(client_socket_fd);
+        break;
+    case 5:
+        display_payment_history(client_socket_fd);
         break;
     default:
         break;
@@ -151,9 +154,17 @@ void make_payment(int client_socket_fd)
 
     receive_payment_data(client_socket_fd, &new_payment);
 
+    if (check_card_validity(new_payment.card_no) == false)
+    {
+        send_text_to_client(client_socket_fd, "***** Broj platne kartice ne postoji u bazi. *****\n\n");
+        return;
+    }
+
     total_sum += new_payment.ammount;
     write_total_sum_to_file(total_sum);
+    write_payment_to_file(new_payment);
 
+    send_text_to_client(client_socket_fd, "***** Hvala na uplati. *****\n\n");
     fprintf(stdout, "Upravo je uplaćeno %.3f dinara.\n", new_payment.ammount);
 }
 
@@ -168,32 +179,32 @@ void receive_payment_data(int client_socket_fd, struct payment *new_payment)
 
     if (recv(client_socket_fd, name, 1024, 0) == -1)
     {
-        perror("Greska u primanju imena.\n");
+        perror("Greška u primanju imena.\n");
         exit(EXIT_FAILURE);
     }
     if (recv(client_socket_fd, surname, 1024, 0) == -1)
     {
-        perror("Greska u primanju prezimena.\n");
+        perror("Greška u primanju prezimena.\n");
         exit(EXIT_FAILURE);
     }
     if (recv(client_socket_fd, address, 1024, 0) == -1)
     {
-        perror("Greska u primanju adrese.\n");
+        perror("Greška u primanju adrese.\n");
         exit(EXIT_FAILURE);
     }
     if (recv(client_socket_fd, card_no, 1024, 0) == -1)
     {
-        perror("Greska u primanju broja kartice.\n");
+        perror("Greška u primanju broja kartice.\n");
         exit(EXIT_FAILURE);
     }
     if (recv(client_socket_fd, cvv, 1024, 0) == -1)
     {
-        perror("Greska u primanju cvv broja.\n");
+        perror("Greška u primanju cvv broja.\n");
         exit(EXIT_FAILURE);
     }
     if (recv(client_socket_fd, &ammount, sizeof(ammount), 0) == -1)
     {
-        perror("Greska u primanju iznosa.\n");
+        perror("Greška u primanju iznosa.\n");
         exit(EXIT_FAILURE);
     }
 
@@ -209,7 +220,7 @@ void send_total_sum(int client_socket_fd)
 {
     if (send(client_socket_fd, &total_sum, sizeof(total_sum), 0) == -1)
     {
-        perror("Desila se greska pri slanju ukupnog iznosa klijentu.\n");
+        perror("Desila se greška pri slanju ukupnog iznosa klijentu.\n");
         exit(EXIT_FAILURE);
     }
 }
@@ -220,11 +231,19 @@ void sign_up(int client_socket_fd)
 
     receive_user_data(client_socket_fd, &new_user);
 
+    if (check_card_validity(new_user.card_no) == false)
+    {
+        send_text_to_client(client_socket_fd, "***** Broj platne kartice ne postoji u bazi. *****\n");
+        return;
+    }
+
     if (write_user_to_file(&new_user) == false)
     {
-        perror("Vec postoji korisnik sa tim korisnickim imenom u bazi.\n");
-        exit(EXIT_FAILURE);
+        send_text_to_client(client_socket_fd, "***** Već postoji korisnik sa takvim korisničkim imenom. *****\n");
+        return;
     }
+
+    send_text_to_client(client_socket_fd, "***** Uspešno ste se registrovali. *****\n");
 }
 
 void receive_user_data(int client_socket_fd, struct user *new_user)
@@ -239,39 +258,37 @@ void receive_user_data(int client_socket_fd, struct user *new_user)
 
     if (recv(client_socket_fd, username, 1024, 0) == -1)
     {
-        perror("Greska u slanju korisnickog imena.\n");
+        perror("Greška u slanju korisničkog imena.\n");
         exit(EXIT_FAILURE);
     }
     if (recv(client_socket_fd, password, 1024, 0) == -1)
     {
-        perror("Greska u slanju lozinke.\n");
+        perror("Greška u slanju lozinke.\n");
         exit(EXIT_FAILURE);
     }
     if (recv(client_socket_fd, name, 1024, 0) == -1)
     {
-        perror("Greska u slanju imena.\n");
+        perror("Greška u slanju imena.\n");
         exit(EXIT_FAILURE);
     }
     if (recv(client_socket_fd, surname, 1024, 0) == -1)
     {
-        perror("Greska u slanju broja prezimena.\n");
+        perror("Greška u slanju broja prezimena.\n");
         exit(EXIT_FAILURE);
     }
     if (recv(client_socket_fd, jmbg, 1024, 0) == -1)
     {
-        perror("Greska u slanju jmbg-a.\n");
+        perror("Greška u slanju jmbg-a.\n");
         exit(EXIT_FAILURE);
     }
     if (recv(client_socket_fd, card_no, 1024, 0) == -1)
     {
-        perror("Greska u slanju broja kartice.\n");
+        perror("Greška u slanju broja kartice.\n");
         exit(EXIT_FAILURE);
     }
     if (recv(client_socket_fd, email, 1024, 0) == -1)
-    {
-        perror("Greska u slanju email-a.\n");
-        exit(EXIT_FAILURE);
-    }
+        perror("Greška u slanju email-a.\n");
+    exit(EXIT_FAILURE);
 
     new_user->username = username;
     new_user->password = password;
@@ -280,4 +297,45 @@ void receive_user_data(int client_socket_fd, struct user *new_user)
     new_user->jmbg = jmbg;
     new_user->card_no = card_no;
     new_user->email = email;
+}
+
+void sign_in(int client_socket_fd)
+{
+    struct user user;
+    char card_no[1024];
+    card_no[0] = '\0';
+    bool can_log_in = false;
+
+    receive_user_data(client_socket_fd, &user);
+
+    if (check_user_validity(user, card_no) == true)
+        can_log_in = true;
+    else
+        can_log_in = false;
+
+    if (send(client_socket_fd, &can_log_in, sizeof(can_log_in), 0) == -1)
+    {
+        perror("Greška pri prijavljivanju.\n");
+        exit(EXIT_FAILURE);
+    }
+
+    if (send(client_socket_fd, card_no, 1024, 0) == -1)
+    {
+        perror("Greška pri prijavljivanju.\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+void display_payment_history(int client_socket_fd)
+{
+    char payments[16384];
+    payments[0] = '\0';
+
+    read_payments_from_file(payments);
+
+    if (send(client_socket_fd, payments, 16384, 0) == -1)
+    {
+        perror("Greška pri slanju istorije placanja.\n");
+        exit(EXIT_FAILURE);
+    }
 }

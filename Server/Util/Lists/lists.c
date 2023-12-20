@@ -5,7 +5,7 @@ void add(struct list **head, void *value)
     struct list *new_node = (struct list *)malloc(sizeof(struct list));
     if (new_node == NULL)
     {
-        fprintf(stderr, "Memory allocation failed\n");
+        fprintf(stderr, "Neuspela alokacija memorije za listu.\n");
         exit(EXIT_FAILURE);
     }
 
