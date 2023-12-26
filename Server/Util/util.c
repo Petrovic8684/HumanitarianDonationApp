@@ -54,7 +54,6 @@ void start_accepting_incoming_connections(int server_socket_fd)
     while (true)
     {
         struct accepted_socket *client_socket = accept_incoming_connection(server_socket_fd);
-        // accepted_sockets[accepted_sockets_count++] = *client_socket;
         add(&list, &client_socket);
         fprintf(stdout, "Trenutan broj aktivnih korisnika: %d\n", ++list_length);
 
@@ -147,6 +146,7 @@ int get_chosen_option(int client_socket_fd)
     return option;
 }
 
+// Kreiranje nove uplate.
 void make_payment(int client_socket_fd)
 {
     struct payment new_payment;
@@ -154,9 +154,9 @@ void make_payment(int client_socket_fd)
 
     receive_payment_data(client_socket_fd, &new_payment);
 
-    if (check_card_validity(new_payment.card_no) == false)
+    if (check_card_and_ccv_validity(new_payment.card_no, new_payment.cvv) == false)
     {
-        send_text_to_client(client_socket_fd, "***** Broj platne kartice ne postoji u bazi. *****\n\n");
+        send_text_to_client(client_socket_fd, "***** Broj platne kartice i/ili cvv broj se ne poklapaju sa podacima iz baze. *****\n\n");
         return;
     }
 
@@ -168,6 +168,7 @@ void make_payment(int client_socket_fd)
     fprintf(stdout, "Upravo je uplaćeno %.3f dinara.\n", new_payment.ammount);
 }
 
+// Prima podatke o novoj uplati koje je poslao klijent.
 void receive_payment_data(int client_socket_fd, struct payment *new_payment)
 {
     char name[1024];
@@ -216,6 +217,7 @@ void receive_payment_data(int client_socket_fd, struct payment *new_payment)
     new_payment->ammount = ammount;
 }
 
+// Šalje podatke o ukupno prikupljenim sredstvima.
 void send_total_sum(int client_socket_fd)
 {
     if (send(client_socket_fd, &total_sum, sizeof(total_sum), 0) == -1)
@@ -225,6 +227,7 @@ void send_total_sum(int client_socket_fd)
     }
 }
 
+// Registrovanje novog korisnika.
 void sign_up(int client_socket_fd)
 {
     struct user new_user;
@@ -246,6 +249,7 @@ void sign_up(int client_socket_fd)
     send_text_to_client(client_socket_fd, "***** Uspešno ste se registrovali. *****\n");
 }
 
+// Prima podatke o novom korisniku od klijenta.
 void receive_user_data(int client_socket_fd, struct user *new_user)
 {
     char username[1024];
@@ -287,8 +291,10 @@ void receive_user_data(int client_socket_fd, struct user *new_user)
         exit(EXIT_FAILURE);
     }
     if (recv(client_socket_fd, email, 1024, 0) == -1)
+    {
         perror("Greška u slanju email-a.\n");
-    exit(EXIT_FAILURE);
+        exit(EXIT_FAILURE);
+    }
 
     new_user->username = username;
     new_user->password = password;
@@ -299,6 +305,7 @@ void receive_user_data(int client_socket_fd, struct user *new_user)
     new_user->email = email;
 }
 
+// Prijavljivanje korisnika.
 void sign_in(int client_socket_fd)
 {
     struct user user;
@@ -326,6 +333,7 @@ void sign_in(int client_socket_fd)
     }
 }
 
+// Šalje klijentu poslednjih 10 uplata. Samo za prijavljene korisnike.
 void display_payment_history(int client_socket_fd)
 {
     char payments[16384];

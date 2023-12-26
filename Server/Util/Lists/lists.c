@@ -1,5 +1,6 @@
 #include "lists.h"
 
+// Dodaje novi element u jednostruko spregnutu listu.
 void add(struct list **head, void *value)
 {
     struct list *new_node = (struct list *)malloc(sizeof(struct list));
@@ -27,6 +28,7 @@ void add(struct list **head, void *value)
     }
 }
 
+// Uklanja element iz jednostruko spregnute liste.
 void rmv(struct list **head, void *value)
 {
     if (*head == NULL)
@@ -59,6 +61,7 @@ void rmv(struct list **head, void *value)
     free(current);
 }
 
+// Briše sve elemente jednostruko spregnute liste.
 void clear(struct list **head)
 {
     struct list *current = *head;

@@ -1,3 +1,2 @@
-Joca jocinasifra Jovan Petrovic 1234567890123 1234-1234-1234-1234 jovan8684@gmail.com
-Sany sany002 Sanela Petkovic 1234093212342 3213-2213-5546-7381 sanypetkovic007@gmail.com
-Pedja djape Predrag Stojkovic 2937472918234 5232-5231-7543-2223 pedja123@gmail.com
+Jovan jovan 1234-1234-1234-1234 Jovan Petrovic 0612002722211 jovan8684@gmail.com
+Sanela sanela 1111-2222-3333-4444 Sanela Petkovic 0707002727214 sanypetkovic007@gmail.com
