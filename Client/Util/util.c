@@ -1,6 +1,9 @@
 #include "util.h"
 
+// Da li je korisnik prijavljen ili ne?
 static bool is_logged_in = false;
+
+// Broj platne kartice prijavljenog korisnika.
 static char logged_card_no[1024];
 
 // Vraća TCP socket.
@@ -31,9 +34,10 @@ struct sockaddr_in *create_adress(char *ip, int port)
 }
 
 // Prima tekst sa servera.
-void receive_text_from_server(int client_socket_fd)
+char *receive_text_from_server(int client_socket_fd, bool print)
 {
-    char response[1024];
+    char *response = (char *)malloc(1024);
+    response[0] = '\0';
 
     ssize_t ammount_received = recv(client_socket_fd, response, 1024, 0);
 
@@ -43,28 +47,30 @@ void receive_text_from_server(int client_socket_fd)
         exit(EXIT_FAILURE);
     }
 
-    fprintf(stdout, "%s", response);
+    if (print == true)
+        fprintf(stdout, "%s", response);
+
+    return response;
 }
 
 // Glavna logika klijentske aplikacije.
 void start_communicating_with_server(int client_socket_fd)
 {
-    // Stampa poruku o uspesnom povezivanju.
-    receive_text_from_server(client_socket_fd);
+    // Štampa poruku o uspešnom povezivanju.
+    (void)receive_text_from_server(client_socket_fd, true);
 
     int option;
     do
     {
-        // Stampa opcije.
-        receive_text_from_server(client_socket_fd);
+        // Štampa opcije.
+        (void)receive_text_from_server(client_socket_fd, true);
 
-        // Bira opcije sa tastature i salje na server.
         option = choose_and_send_option(client_socket_fd);
-        // Prima odgovor servera na opciju.
         get_server_response(client_socket_fd, option);
     } while (option != 0);
 }
 
+// Bira opcije sa tastature i šalje na server.
 int choose_and_send_option(int client_socket_fd)
 {
     int option = -1;
@@ -102,6 +108,7 @@ int choose_and_send_option(int client_socket_fd)
     return option;
 }
 
+// Prima odgovor servera na opciju.
 void get_server_response(int client_socket_fd, int option)
 {
     switch (option)
@@ -116,7 +123,6 @@ void get_server_response(int client_socket_fd, int option)
         sign_up(client_socket_fd);
         break;
     case 4:
-
         sign_in(client_socket_fd);
         break;
     case 5:
@@ -127,6 +133,7 @@ void get_server_response(int client_socket_fd, int option)
     }
 }
 
+// Kreiranje nove uplate.
 void make_payment(int client_socket_fd)
 {
     struct payment new_payment;
@@ -134,49 +141,13 @@ void make_payment(int client_socket_fd)
 
     send_payment_data(client_socket_fd, new_payment);
 
-    receive_text_from_server(client_socket_fd);
+    (void)receive_text_from_server(client_socket_fd, true);
+
+    char *response = receive_text_from_server(client_socket_fd, false);
+    write_payment_to_file(response);
 }
 
-void send_payment_data(int client_socket_fd, struct payment new_payment)
-{
-    if (send(client_socket_fd, new_payment.name, 1024, 0) == -1)
-    {
-
-        perror("Greška u slanju imena.\n");
-        exit(EXIT_FAILURE);
-    }
-    if (send(client_socket_fd, new_payment.surname, 1024, 0) == -1)
-    {
-
-        perror("Greška u slanju prezimena.\n");
-        exit(EXIT_FAILURE);
-    }
-    if (send(client_socket_fd, new_payment.address, 1024, 0) == -1)
-    {
-
-        perror("Greška u slanju adrese.\n");
-        exit(EXIT_FAILURE);
-    }
-    if (send(client_socket_fd, new_payment.card_no, 1024, 0) == -1)
-    {
-
-        perror("Greška u slanju broja kartice.\n");
-        exit(EXIT_FAILURE);
-    }
-    if (send(client_socket_fd, new_payment.cvv, 1024, 0) == -1)
-    {
-
-        perror("Greška u slanju cvv broja.\n");
-        exit(EXIT_FAILURE);
-    }
-    if (send(client_socket_fd, &new_payment.ammount, sizeof(new_payment.ammount), 0) == -1)
-    {
-
-        perror("Greška u slanju iznosa.\n");
-        exit(EXIT_FAILURE);
-    }
-}
-
+// Učitavanje podataka o uplati sa tastature.
 void get_payment_data(struct payment *new_payment)
 {
     char *name = NULL;
@@ -262,8 +233,49 @@ void get_payment_data(struct payment *new_payment)
     new_payment->ammount = ammount;
 }
 
+// Slanje podataka o uplati na server.
+void send_payment_data(int client_socket_fd, struct payment new_payment)
+{
+    if (send(client_socket_fd, new_payment.name, 1024, 0) == -1)
+    {
+        perror("Greška u slanju imena.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (send(client_socket_fd, new_payment.surname, 1024, 0) == -1)
+    {
+        perror("Greška u slanju prezimena.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (send(client_socket_fd, new_payment.address, 1024, 0) == -1)
+    {
+        perror("Greška u slanju adrese.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (send(client_socket_fd, new_payment.card_no, 1024, 0) == -1)
+    {
+        perror("Greška u slanju broja kartice.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (send(client_socket_fd, new_payment.cvv, 1024, 0) == -1)
+    {
+        perror("Greška u slanju cvv broja.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (send(client_socket_fd, &new_payment.ammount, sizeof(new_payment.ammount), 0) == -1)
+    {
+        perror("Greška u slanju iznosa.\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+// Preko regularnih izraza proverava ispravnost formata unetog broja platne kartice.
 bool is_card_no_valid(char *card_no)
 {
+    if (strlen(card_no) != 19)
+    {
+        return false;
+    }
+
     regex_t regex;
     int result;
 
@@ -288,6 +300,7 @@ bool is_card_no_valid(char *card_no)
     }
 }
 
+// Proverava ispravnost cvv broja.
 bool is_cvv_valid(char *const cvv)
 {
     if (strlen(cvv) > 4)
@@ -300,6 +313,7 @@ bool is_cvv_valid(char *const cvv)
     return true;
 }
 
+// Prikazuje ukupno prikupljena sredstva.
 void display_total_sum(int client_socket_fd)
 {
     float total_sum;
@@ -312,6 +326,7 @@ void display_total_sum(int client_socket_fd)
     fprintf(stdout, "\nUkupan iznos je: %f\n\n", total_sum);
 }
 
+// Registrovanje novog korisnika.
 void sign_up(int client_socket_fd)
 {
     struct user new_user;
@@ -319,56 +334,11 @@ void sign_up(int client_socket_fd)
 
     send_user_data(client_socket_fd, new_user);
 
-    receive_text_from_server(client_socket_fd);
+    (void)receive_text_from_server(client_socket_fd, true);
     fprintf(stdout, "\n");
 }
 
-void send_user_data(int client_socket_fd, struct user new_user)
-{
-    if (send(client_socket_fd, new_user.username, 1024, 0) == -1)
-    {
-
-        perror("Greška u slanju korisničkog imena.\n");
-        exit(EXIT_FAILURE);
-    }
-    if (send(client_socket_fd, new_user.password, 1024, 0) == -1)
-    {
-
-        perror("Greška u slanju lozinke.\n");
-        exit(EXIT_FAILURE);
-    }
-    if (send(client_socket_fd, new_user.name, 1024, 0) == -1)
-    {
-
-        perror("Greška u slanju imena.\n");
-        exit(EXIT_FAILURE);
-    }
-    if (send(client_socket_fd, new_user.surname, 1024, 0) == -1)
-    {
-
-        perror("Greška u slanju broja prezimena.\n");
-        exit(EXIT_FAILURE);
-    }
-    if (send(client_socket_fd, new_user.jmbg, 1024, 0) == -1)
-    {
-
-        perror("Greška u slanju jmbg-a.\n");
-        exit(EXIT_FAILURE);
-    }
-    if (send(client_socket_fd, new_user.card_no, 1024, 0) == -1)
-    {
-
-        perror("Greška u slanju broja kartice.\n");
-        exit(EXIT_FAILURE);
-    }
-    if (send(client_socket_fd, new_user.email, 1024, 0) == -1)
-    {
-
-        perror("Greška u slanju email-a.\n");
-        exit(EXIT_FAILURE);
-    }
-}
-
+// Učitavanje podataka o novom korisniku sa tastature.
 void get_user_data(struct user *new_user)
 {
     char *username = NULL;
@@ -438,6 +408,47 @@ void get_user_data(struct user *new_user)
     new_user->email = email;
 }
 
+// Slanje podataka o novom korisniku na server.
+void send_user_data(int client_socket_fd, struct user new_user)
+{
+    if (send(client_socket_fd, new_user.username, 1024, 0) == -1)
+    {
+        perror("Greška u slanju korisničkog imena.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (send(client_socket_fd, new_user.password, 1024, 0) == -1)
+    {
+        perror("Greška u slanju lozinke.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (send(client_socket_fd, new_user.name, 1024, 0) == -1)
+    {
+        perror("Greška u slanju imena.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (send(client_socket_fd, new_user.surname, 1024, 0) == -1)
+    {
+        perror("Greška u slanju broja prezimena.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (send(client_socket_fd, new_user.jmbg, 1024, 0) == -1)
+    {
+        perror("Greška u slanju jmbg-a.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (send(client_socket_fd, new_user.card_no, 1024, 0) == -1)
+    {
+        perror("Greška u slanju broja kartice.\n");
+        exit(EXIT_FAILURE);
+    }
+    if (send(client_socket_fd, new_user.email, 1024, 0) == -1)
+    {
+        perror("Greška u slanju email-a.\n");
+        exit(EXIT_FAILURE);
+    }
+}
+
+// Prijavljivanje korisnika.
 void sign_in(int client_socket_fd)
 {
     struct user user;
@@ -494,6 +505,7 @@ void sign_in(int client_socket_fd)
     }
 }
 
+// Prikaz poslednjih 10 uplata. Samo za prijavljene korisnike.
 void display_payment_history(int client_socket_fd)
 {
     char buffer[16384];
@@ -504,4 +516,19 @@ void display_payment_history(int client_socket_fd)
     }
 
     fprintf(stdout, "%s\n\n", buffer);
+}
+
+void write_payment_to_file(char *response)
+{
+    FILE *file = fopen("payment.txt", "w");
+
+    if (file == NULL)
+    {
+        perror("Nemoguće otvoriti fajl totalsum.txt");
+        exit(EXIT_FAILURE);
+    }
+
+    fprintf(file, "%s\n", response);
+
+    fclose(file);
 }
